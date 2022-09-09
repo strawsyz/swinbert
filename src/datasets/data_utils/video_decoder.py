@@ -23,6 +23,7 @@ def temporal_sampling(frames, start_idx, end_idx, num_samples):
     """
     index = torch.linspace(start_idx, end_idx, num_samples)
     index = torch.clamp(index, 0, len(frames) - 1).long().tolist()
+#     print("frame index", index)  [0,0,0,1,1,2,2....,28,28,29]
     frames = [frames[idx] for idx in index]
     return frames
 
@@ -119,7 +120,16 @@ def pyav_decode_stream(
     frames = {}
     buffer_count = 0
     max_pts = 0
+#     print("start_pts", start_pts)  # 0
+#     print("end_pts", end_pts)  # 14848
+#     print("stream", stream)  # av.VideoStream
+#     print("stream_name", stream_name)  # {'video':0 }
+#     print("container", container)  # av.InputContainer 
+#     print("seek_offset", seek_offset)　# 0
+#     print("buffer_size", buffer_size) # 0 
     for frame in container.decode(**stream_name):
+#         print("frame.pts", frame.pts)
+#         print("max_pts", max_pts)
         max_pts = max(max_pts, frame.pts)
         if frame.pts < start_pts:
             continue
@@ -130,7 +140,10 @@ def pyav_decode_stream(
             frames[frame.pts] = frame
             if buffer_count >= buffer_size:
                 break
+#     print("frames", sorted(frames))  # [0, 512, 1024,....]
+#     print("frames", frames)
     result = [frames[pts] for pts in sorted(frames)]
+#     print("result", result)
     return result, max_pts
 
 
@@ -299,6 +312,16 @@ def decode(
     """
     # Currently support two decoders: 1) PyAV, and 2) TorchVision.
     assert clip_idx >= -2, "Not valied clip_idx {}".format(clip_idx)
+#     print("container", container)  # video
+#     print("sampling_rate",sampling_rate) # 1
+#     print("num_frames",num_frames)  # 64
+#     print("clip_idx", clip_idx)  # -2
+#     print("num_clips", num_clips)  # 1
+#     print("target_fps", target_fps)  # 3
+#     print("safeguard_duration", safeguard_duration)  # False
+#     print("video_max_pts",video_max_pts)  # None
+#     print("start", start)  # None
+#     print("end", end)  # None
     try:
         if backend == "pyav":
             frames, fps, decode_all_video, video_max_pts = pyav_decode(
@@ -320,7 +343,7 @@ def decode(
         print("Failed to decode the video: {}".format(container.name))
         container.close()
         return None, video_max_pts
-
+    print("frames", frames)
     # Return None if the frames was not decoded successfully.
     if frames is None or len(frames) == 0:
         container.close()
@@ -340,6 +363,10 @@ def decode(
         sample_num_clips if decode_all_video else 1,
     )
     # Perform temporal sampling from the decoded video.
+#     print(len(frames))  # 30
+#     print("start_idx", start_idx)  # 0 
+#     print("end_idx", end_idx)  # 29
+#     print("num_frames", num_frames)  # 64
     frames = temporal_sampling(frames, start_idx, end_idx, num_frames)
     frames = [frame.to_rgb().to_ndarray() for frame in frames]
     frames = torch.as_tensor(np.stack(frames))

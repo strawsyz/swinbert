@@ -313,6 +313,7 @@ class CaptionTensorizer(object):
         tokens = [self.tokenizer.cls_token] + tokens_a + [self.tokenizer.sep_token]
         segment_ids = [cls_token_segment_id] + [sequence_a_segment_id] * (len(tokens) - 1)
         seq_a_len = len(tokens)
+#         print("tokens", tokens)
         if text_b:
             text_b = self.prepro_raw_txt(text_b)
             # pad text_a to keep it in fixed length for better inference.
@@ -328,6 +329,12 @@ class CaptionTensorizer(object):
             segment_ids += [sequence_b_segment_id] * (len(tokens_b) + 1)
 
         seq_len = len(tokens)
+#         print("cls_token_segment_id", cls_token_segment_id)  # 0
+#         print("self.tokenizer.cls_token", self.tokenizer.cls_token)  # [CLS]
+#         print("self.tokenizer.sep_token", self.tokenizer.sep_token)  # [SEP]
+#         print("seq_a_len", seq_a_len)  # 20
+#         print("seq_len", seq_len)  # 10
+#         print("tokens", tokens)  # [CLS], [MASK], [MASK], [MASK], [MASK], [MASK], [MASK], [MASK], [MASK],...[SEP]
         return tokens, segment_ids, seq_a_len, seq_len
 
     def tensorize_example_e2e(self, text_a, img_feat, text_b=None,

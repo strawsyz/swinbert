@@ -71,6 +71,7 @@ def inference(args, video_path, model, tokenizer, tensorizer):
     preproc_frames = _transforms(args, frames)
     data_sample = tensorizer.tensorize_example_e2e('', preproc_frames)
     data_sample = tuple(t.to(args.device) for t in data_sample)
+    results = []
     with torch.no_grad():
 
         inputs = {'is_decode': True,
@@ -107,8 +108,12 @@ def inference(args, video_path, model, tokenizer, tensorizer):
                 cap = tokenizer.decode(cap.tolist(), skip_special_tokens=True)
                 logger.info(f"Prediction: {cap}")
                 logger.info(f"Conf: {conf.item()}")
+                print(f"Prediction: {cap}")
+                print(f"Conf: {conf.item()}")
+                results.append((cap, conf.item()))
 
     logger.info(f"Inference model computing time: {time_meter} seconds")
+    return results
 
 def check_arguments(args):
     # shared basic checks
@@ -175,7 +180,7 @@ def get_custom_args(base_config):
                         help="0: load all SwinBERT pre-trained weights, 1: load only pre-trained sparse mask")
     parser.add_argument('--att_mask_expansion', type=int, default=-1,
                         help="-1: random init, 0: random init and then diag-based copy, 1: interpolation")
-    parser.add_argument('--resume_checkpoint', type=str, default='None')
+    parser.add_argument('--resume_checkpoint', type=str, default='./models/table1/vatex/best-checkpoint/model.bin')
     parser.add_argument('--test_video_fname', type=str, default='None')
     args = base_config.parse_args()
     return args
@@ -223,9 +228,44 @@ def main(args):
     vl_transformer.eval()
 
     tensorizer = build_tensorizer(args, tokenizer, is_train=False)
-    inference(args, args.test_video_fname, vl_transformer, tokenizer, tensorizer)
+    
+    all_results = {}
+#     video_dataset_path = r"/workspace/datasets/jhmdb_sentences/ReCompress_Videos/"
+#     file_names = []
+#     for dir_name in os.listdir(video_dataset_path):
+#         dir_path = os.path.join(video_dataset_path, dir_name)
+#         if not os.path.isdir(dir_path):
+#             continue
+#         for file_name in os.listdir(dir_path):
+#             file_path = os.path.join(dir_path, file_name)
+#             if file_name[-3:] == "avi":
+#                 file_names.append(file_path)
+#     video_dataset_path = r"/workspace/datasets/a2d_sentences/Release/clips320H/"
+    file_names = []
+#     for file in os.listdir(video_dataset_path):
+#         file_names.append(os.path.join(video_dataset_path, file))
+
+    for i in range(33):
+        video_path = f"/workspace/SwinBERT/docs/Abuse023_x264-duration-1s-{i}.mp4"
+        file_names.append(video_path)        
+        
+#     results = inference(args, args.test_video_fname, vl_transformer, tokenizer, tensorizer)
+    for video_name in file_names:
+        print(video_name)
+#         video_name = f"/workspace/SwinBERT/docs/Abuse023_x264.mp4"
+        results = inference(args, video_name, vl_transformer, tokenizer, tensorizer)
+#         all_results = {video_name:results}
+        all_results[video_name] = results
+        break
+        print("=================================")
+#     np.save("Abuse023_x264_captions", all_results)
 
 if __name__ == "__main__":
     shared_configs.shared_video_captioning_config(cbs=True, scst=True)
     args = get_custom_args(shared_configs)
-    main(args)
+    args.eval_model_dir = "./models/table1/vatex/best-checkpoint/"
+    args.test_video_fname = r"./videos/100_pullups_pullup_f_nm_np1_fr_med_1.avi"
+    args.do_lower_case = True
+    args.do_test = True
+    results = main(args)
+    print(results)
