@@ -343,7 +343,7 @@ def decode(
         print("Failed to decode the video: {}".format(container.name))
         container.close()
         return None, video_max_pts
-    print("frames", frames)
+    # print("frames", frames)
     # Return None if the frames was not decoded successfully.
     if frames is None or len(frames) == 0:
         container.close()

@@ -34,6 +34,7 @@ from src.modeling.video_captioning_e2e_vid_swin_bert import VideoTransformer
 from src.modeling.load_swin import get_swin_model, reload_pretrained_swin
 from src.modeling.load_bert import get_bert_model
 from src.solver import AdamW, WarmupLinearLR
+import numpy as np
 
 from azureml.core.run import Run
 aml_run = Run.get_context()
@@ -89,9 +90,12 @@ def mixed_precision_init(args, model):
     else:
         scheduler = torch.optim.lr_scheduler.StepLR(
             optimizer, step_size=int(max_iter/2.0), gamma=0.1)
-    
+
     if args.mixed_precision_method == "deepspeed":
         config = get_deepspeed_config(args)
+        print(os.environ.get('MASTER_PORT'))
+        master_port = os.environ.get("MASTER_PORT", None)
+        print(master_port)
         model, optimizer, _, _ = deepspeed.initialize(
             config_params=config,
             model=model,
@@ -340,6 +344,10 @@ def evaluate(args, val_dataloader, model, tokenizer, output_dir):
     if is_main_process():
         caption_file = val_dataloader.dataset.get_caption_file_in_coco_format()
         data = val_dataloader.dataset.yaml_file.split('/')[-2]
+        caption_file =  r"/workspace/SwinBERT/datasets/MSVD/a2d_val.caption_coco_format.json"  # caption file of a2d dataset
+        print(predict_file)  # ./output/checkpoint-1-1/pred.MSVD.val.beam1.max20.tsv
+        print(caption_file)  #  datasets/MSVD/val.caption_coco_format.json
+        print(evaluate_file)  # ./output/checkpoint-1-1/pred.MSVD.val.beam1.max20.eval.json
         result = evaluate_on_coco_caption(predict_file, caption_file, outfile=evaluate_file)
         logger.info(f'evaluation result: {str(result)}')
         logger.info(f'evaluation result saved to {evaluate_file}')
@@ -559,7 +567,7 @@ def main(args):
     logger.info(f"Pytorch version is: {torch.__version__}")
     logger.info(f"Cuda version is: {torch.version.cuda}")
     logger.info(f"cuDNN version is : {torch.backends.cudnn.version()}" )
-
+    # np.save("/workspace/SwinBERT/args", args)
     # Get Video Swin model 
     swin_model = get_swin_model(args)
     # Get BERT and tokenizer 
@@ -568,6 +576,10 @@ def main(args):
     vl_transformer = VideoTransformer(args, config, swin_model, bert_model) 
     vl_transformer.freeze_backbone(freeze=args.freeze_backbone)
 
+    print("=============")
+    print("args.pretrained_checkpoint", args.pretrained_checkpoint)
+    print("===================")
+    args.pretrained_checkpoint ="./models/table1/vatex/best-checkpoint/"
     if args.do_eval:
         # load weights for eval/inference
         logger.info(f"Loading state dict from checkpoint {args.resume_checkpoint}")
@@ -676,4 +688,8 @@ def main(args):
 if __name__ == "__main__":
     shared_configs.shared_video_captioning_config(cbs=True, scst=True)
     args = get_custom_args(shared_configs)
+    os.environ['MASTER_PORT'] = "123123"
+    # 获取环境变量方法1
+    print(os.environ.get('MASTER_PORT'))
     main(args)
+# --config src/configs/VidSwinBert/msvd_8frm_default.json         --train_yaml MSVD/train.yaml         --val_yaml MSVD/val.yaml

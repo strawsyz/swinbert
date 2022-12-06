@@ -1843,6 +1843,7 @@ class BertForImageCaptioning(BertPreTrainedModel):
             use_cbs=False, fsm=None, num_constraints=None,
             min_constraints_to_satisfy=None, use_hypo=False,
             decoding_constraint_flag=None, bad_ending_ids=None,
+            RVOS_mask=None,
             ):
         """ Generates captions given image features
         """

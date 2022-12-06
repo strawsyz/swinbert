@@ -3,6 +3,7 @@ Copyright (c) Microsoft Corporation.
 Licensed under the MIT license.
 
 """
+import h5py
 import torch
 import torchvision.transforms as transforms
 import cv2
@@ -22,9 +23,48 @@ from src.utils.logger import LOGGER
 import base64
 
 # video_transforms & volume_transforms from https://github.com/hassony2/torch_videovision
-from .data_utils.video_transforms import Compose, Resize, RandomCrop, ColorJitter, Normalize, CenterCrop, RandomHorizontalFlip, RandomResizedCrop
+from .data_utils.video_transforms import Compose, Resize, RandomCrop,  Normalize, CenterCrop
+    # RandomHorizontalFlip, RandomResizedCrop,ColorJitter
 from .data_utils.volume_transforms import ClipToTensor
 import code, time
+import os
+import sys
+
+
+# def get_information(path):
+#     try:
+#         data = np.load(path, allow_pickle=True)
+#         caption = data[0]
+#         image = data[1]
+#         mask = data[2][data[3][2]-1]
+#         video_path = data[3][3]
+#
+#
+#
+#         return caption, image, mask, video_path
+#     except Exception as e:
+#         print(data[2].shape)
+#         print(data[3])
+#         print(e)
+#         print(path)
+#         sys.exit()
+def get_information(path):
+    data = np.load(path, allow_pickle=True)
+    caption = data[0]
+    image = data[1]
+    mask = data[2]
+    # print(data[3])
+    video_id = data[3][0]
+    frame_id = data[3][1]
+    instance_id = data[3][2]
+    video_path = data[3][3]
+    filepath = rf"/workspace/datasets/a2d_sentences/text_annotations/a2d_annotation_with_instances/{video_id}/{frame_id:05d}.h5"
+    assert os.path.exists(filepath), print(filepath)
+    f = h5py.File(filepath)
+    instances = list(f['instance'])
+    mask = mask[instances.index(instance_id)]
+    return caption, image, mask, video_path
+
 
 class VisionLanguageTSVDataset(object):
     def __init__(self, args, yaml_file, tokenizer, tensorizer=None, is_train=True, on_memory=False):
@@ -34,21 +74,21 @@ class VisionLanguageTSVDataset(object):
         self.tensorizer = tensorizer
 
         self.yaml_file = yaml_file
-        self.root = op.dirname(yaml_file)
+        self.root = op.dirname(yaml_file)  # 主文件夹
 
-        self.cfg = load_from_yaml_file(yaml_file)
-        self.is_composite = self.cfg.get('composite', False)
-        self.cap_linelist_file = find_file_path_in_yaml(self.cfg.get('caption_linelist', None), self.root)
+        self.cfg = load_from_yaml_file(yaml_file)  # 加载文件夹信息，存储在yaml文件中
+        self.is_composite = self.cfg.get('composite', False)  # 不知道什么属性，意思是 是否复合
+        self.cap_linelist_file = find_file_path_in_yaml(self.cfg.get('caption_linelist', None), self.root)  # 不知道什么东西
 
-        self.visual_file = self.cfg.get('img', None)
-        self.visual_tsv = self.get_tsv_file(self.visual_file)
+        self.visual_file = self.cfg.get('img', None)  # 视频元信息文件
+        self.visual_tsv = self.get_tsv_file(self.visual_file)  # 获得视频元信息
 
-        self.label_file = self.cfg.get('label', None)
+        self.label_file = self.cfg.get('label', None)  # 标签元信息文件
         self.label_tsv = self.get_tsv_file(self.label_file)
 
-        self.cap_file = self.cfg.get('caption', None)
+        self.cap_file = self.cfg.get('caption', None)  # caption元信息文件， 内容貌似和标签元信息文件一样
         self.cap_tsv = self.get_tsv_file(self.cap_file)
- 
+
         if self.is_composite:
             assert op.isfile(self.cap_linelist_file)
             self.cap_line_list = [int(row[2]) for row in tsv_reader(self.cap_linelist_file)]
@@ -102,16 +142,21 @@ class VisionLanguageTSVDataset(object):
                 Resize(self.img_res),
                 RandomCrop((self.img_res,self.img_res)),
                 ClipToTensor(channel_nb=3),
-                Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+                Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
             ]
         else:
             self.raw_video_crop_list = [
                 Resize(self.img_res),
-                CenterCrop((self.img_res,self.img_res)),
+                CenterCrop((self.img_res, self.img_res)),
                 ClipToTensor(channel_nb=3),
-                Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
-            ]            
+                Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ]
         self.raw_video_prcoess = Compose(self.raw_video_crop_list)
+        if is_train:
+            self.root_path = "/workspace/datasets/a2d_sentences/Train"
+        else:
+            self.root_path = "/workspace/datasets/a2d_sentences/test"
+        self.file_list = os.listdir(self.root_path)
 
     def get_composite_source_idx(self):
         if self.is_composite:
@@ -315,43 +360,131 @@ class VisionLanguageTSVDataset(object):
         elif len(row) >= self.decoder_num_frames + 2:
             return self.get_frames_from_tsv(row[2:]), True
         # if the input is a image tsv, return image numpy array
-        else: 
+        else:
             return self.get_image(row[-1]), False
 
     def __len__(self):
-        return len(self.img_line_list)
+        # return len(self.img_line_list)
+        return len(self.file_list)
+
+    def __getitem__(self, idx):
+        # if self.args.debug_speed:
+        #     idx = idx % self.args.effective_batch_size
+        # img_idx, cap_idx = self.get_image_cap_index(idx)
+        # img_key = self.image_keys[img_idx]  # video的相对路径
+        # caption_sample, tag, start, end = self.get_caption_and_timeinfo_wrapper(img_idx, cap_idx)
+        # # get image or video frames
+        # # frames: (T, C, H, W),  is_video: binary tag
+        # raw_frames, is_video = self.get_visual_data(img_idx, start, end)
+        # # raw_frames.shape : 32,3,720,1280
+        #
+        # # apply augmentation. frozen-in-time if the input is an image
+        # # preproc_frames: (T, C, H, W), C = 3, H = W = self.img_res, channel is RGB
+        # preproc_frames = self.apply_augmentations(raw_frames)
+        #
+        # # tokenize caption and generate attention maps
+        # # it will consider only # of visual tokens for building attention maps. # is args.max_img_seq_length
+        # if isinstance(caption_sample, dict):
+        #     caption = caption_sample["caption"]
+        # else:
+        #     caption = caption_sample
+        #     caption_sample = None
+        # if self.args.add_od_labels==True:
+        #     example = self.tensorizer.tensorize_example_e2e(caption, preproc_frames, text_b=tag, text_meta=caption_sample)
+        # else:
+        #     example = self.tensorizer.tensorize_example_e2e(caption, preproc_frames, text_meta=caption_sample)
+        #
+        # # preparing outputs
+        # meta_data = {}
+        # meta_data['caption'] = caption  # raw text data, not tokenized
+        # meta_data['img_key'] = img_key
+        # meta_data['is_video'] = is_video  # True: video data, False: image data
+        # meta_data['tag'] = tag
+        # return img_key, example, meta_data
+
+        # img_key = r"/workspace/SwinBERT/datasets/MSVD/videos/bQJQGoJF7_k_162_169.avi"
+        # caption = r"fuck you"
+        return self.custom_a2d_sentences(idx)
+
+    def custom_a2d_sentences(self, idx):
+        caption, raw_frames, mask, img_key = get_information(os.path.join(self.root_path, self.file_list[idx]))
+        # k = 0.99
+        # mask = mask * (1 - k) + k
+        # raw_frames = raw_frames * mask
+
+        # k = 0.99 * 255
+        # mask = mask * (1 - k) + k
+        # raw_frames = raw_frames * mask
+        # start = None
+        # end = None
+        # img_idx, cap_idx = self.get_image_cap_index(idx)
+        # img_key = self.image_keys[img_idx]  # video的相对路径
+        # caption_sample, tag, start, end = self.get_caption_and_timeinfo_wrapper(img_idx, cap_idx)
+        # get image or video frames
+        # frames: (T, C, H, W),  is_video: binary tag
+        # raw_frames, is_video = self.get_visual_data(img_idx, start, end)
+        # raw_frames = self.decode_and_get_frames(img_key, start, end)
+        # raw_frames.shape : 32,3,720,1280
+        # apply augmentation. frozen-in-time if the input is an image
+        # preproc_frames: (T, C, H, W), C = 3, H = W = self.img_res, channel is RGB
+        preproc_frames = self.apply_augmentations(raw_frames)
+        # preproc_frames = preproc_frames * mask
+        # tokenize caption and generate attention maps
+        # it will consider only # of visual tokens for building attention maps. # is args.max_img_seq_length
+        # if isinstance(caption_sample, dict):
+        #     caption = caption_sample["caption"]
+        # else:
+        #     caption = caption_sample
+        #     caption_sample = None
+        caption_sample = None
+        # if self.args.add_od_labels == True:
+        #     example = self.tensorizer.tensorize_example_e2e(caption, preproc_frames, text_b=tag,
+        #                                                     text_meta=caption_sample)
+        # else:
+        example = self.tensorizer.tensorize_example_e2e(caption, preproc_frames, text_meta=caption_sample)
+        # preparing outputs
+        meta_data = {}
+        tag = 0
+        is_video = True
+        meta_data['caption'] = caption  # raw text data, not tokenized
+        meta_data['img_key'] = img_key
+        meta_data['is_video'] = is_video  # True: video data, False: image data
+        meta_data['tag'] = tag
+
+        return img_key, example, meta_data
 
     def __getitem__(self, idx):
         if self.args.debug_speed:
             idx = idx % self.args.effective_batch_size
         img_idx, cap_idx = self.get_image_cap_index(idx)
         img_key = self.image_keys[img_idx]
-        caption_sample, tag, start, end = self.get_caption_and_timeinfo_wrapper(img_idx, cap_idx)  
+        caption_sample, tag, start, end = self.get_caption_and_timeinfo_wrapper(img_idx, cap_idx)
         # get image or video frames
         # frames: (T, C, H, W),  is_video: binary tag
-        raw_frames, is_video = self.get_visual_data(img_idx, start, end) 
+        raw_frames, is_video = self.get_visual_data(img_idx, start, end)
 
         # apply augmentation. frozen-in-time if the input is an image
-        # preproc_frames: (T, C, H, W), C = 3, H = W = self.img_res, channel is RGB   
+        # preproc_frames: (T, C, H, W), C = 3, H = W = self.img_res, channel is RGB
         preproc_frames = self.apply_augmentations(raw_frames)
-        
+
         # tokenize caption and generate attention maps
-        # it will consider only # of visual tokens for building attention maps. # is args.max_img_seq_length 
+        # it will consider only # of visual tokens for building attention maps. # is args.max_img_seq_length
         if isinstance(caption_sample, dict):
             caption = caption_sample["caption"]
         else:
             caption = caption_sample
             caption_sample = None
-        if self.args.add_od_labels==True:
-            example = self.tensorizer.tensorize_example_e2e(caption, preproc_frames, text_b=tag, text_meta=caption_sample)
+        if self.args.add_od_labels == True:
+            example = self.tensorizer.tensorize_example_e2e(caption, preproc_frames, text_b=tag,
+                                                            text_meta=caption_sample)
         else:
             example = self.tensorizer.tensorize_example_e2e(caption, preproc_frames, text_meta=caption_sample)
 
         # preparing outputs
         meta_data = {}
-        meta_data['caption'] = caption # raw text data, not tokenized
+        meta_data['caption'] = caption  # raw text data, not tokenized
         meta_data['img_key'] = img_key
-        meta_data['is_video'] = is_video # True: video data, False: image data
+        meta_data['is_video'] = is_video  # True: video data, False: image data
         meta_data['tag'] = tag
 
         return img_key, example, meta_data

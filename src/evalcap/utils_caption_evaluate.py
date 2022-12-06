@@ -84,7 +84,8 @@ def evaluate_on_coco_caption(res_file, label_file, outfile=None):
             dump_labels_to_coco_format(cap_dict, label_file_coco)
     else:
         label_file_coco = label_file
-
+    print(label_file_coco)  # datasets/MSVD/val.caption_coco_format.json
+    print(res_file_coco)  # ./output/checkpoint-1-1/pred.MSVD.val.beam1.max20_coco_format.json
     coco = COCO(label_file_coco)
     cocoRes = coco.loadRes(res_file_coco)
     cocoEval = COCOEvalCap(coco, cocoRes, 'corpus')
@@ -403,3 +404,11 @@ class NocapsEvaluator(object):
 
         return flipped_metrics
 
+# if __name__ == '__main__':
+#     label_file_coco = r"datasets/MSVD/val.caption_coco_format.json"
+#     res_file_coco = r"./output/checkpoint-1-1/pred.MSVD.val.beam1.max20_coco_format.json"
+#     # print(res_file_coco)  # ./output/checkpoint-1-1/pred.MSVD.val.beam1.max20_coco_format.json
+#     coco = COCO(label_file_coco)
+#     cocoRes = coco.loadRes(res_file_coco)
+
+    #
