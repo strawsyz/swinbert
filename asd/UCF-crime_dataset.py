@@ -105,6 +105,7 @@ def generate_anomaly_sample(sample):
 
 
 def clip_video(video_path, target_video_filepath, start_frame, end_frame):
+    """切割出视频中一个片段"""
     if os.path.exists(target_video_filepath):
         print("{} exists".format(target_video_filepath))
         return
@@ -348,7 +349,6 @@ def check_captions():
 def plot_gt(frames, total_frame):
     # total_frame = 200
     # frames = [0, 10, 100, 110]
-
     fig = plt.figure()
     ax = fig.add_subplot(111)
     for i in range(len(frames) // 2):
@@ -431,3 +431,4 @@ if __name__ == '__main__':
     # eval_path = r"C:\Users\syz11\Downloads\eval.npy"
     # test_path = r"C:\Users\syz11\Downloads\test.npy"
     # anomaly_class_name = ["Abuse", "Arrest", "Arson", "Assault", "Burglary", "Explosion", "Fighting", "RoadAccidents", "Robbery", "Shooting", "Shoplifting", "Stealing", "Vandalis"]
+    # 2022-12-10 07:01:58 - AnomalyDetection - INFO - Summary Result on AUC metric
